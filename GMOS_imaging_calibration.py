@@ -7,12 +7,16 @@ Requires the script fileSelect.py, also produced by Gemini
 
 import os
 import glob
+import sys
 
 import fileSelect
 from pyraf import iraf
 from pyraf.iraf import gemini, gemtools, gmos
 
-def create_master_bias(qd, rawpath, dbFile, master_bias='MCbias.fits', overwrite=True):
+def create_master_bias(qd, dbFile, data_dir, master_bias='MCbias.fits', overwrite=True):
+    cur_dir = os.getcwd()
+    #os.chdir(data_dir)
+    iraf.chdir(data_dir)
     if os.path.exists(master_bias):
         if overwrite is True:
             remove = raw_input('Remove bias file? (y), n ')
@@ -29,9 +33,10 @@ def create_master_bias(qd, rawpath, dbFile, master_bias='MCbias.fits', overwrite
     bias_files = fileSelect.fileListQuery(dbFile, SQL, qd)
     gmos.gbias.unlearn()
     bias_flags = {'logfile':'biasLog.txt',
-                 'rawpath':rawpath,
+                 'rawpath':'',
                  'fl_vardq':'yes',
                  'verbose':'no'}
+    print('{} bias frames used in Master Bias'.format(len(bias_files)))
     if len(bias_files) < 10:
         print('******WARNING less than 10 bias files********')
     if len(bias_files) > 1:
@@ -50,6 +55,7 @@ def create_master_bias(qd, rawpath, dbFile, master_bias='MCbias.fits', overwrite
     flist = glob.glob('tmplist*')
     for ifile in flist:
         os.remove(ifile)
+    iraf.chdir(cur_dir)
         
 def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
     '''
@@ -76,10 +82,10 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
         flat_flags['bpm'] = 'gmos$data/gmos-s_bpm_HAM_22_12amp_v1.fits'
     filters = ['Ha', 'HaC', 'SII', 'r', 'i']
     for f in filters:
-        print "  Building twilight flat MasterCal for: {}".format(f)
-
         # Select filter name using a substring of the official designation.
         qd['Filter2'] = f + '_G%'
+        flat_files = fileSelect.fileListQuery(dbFile, fileSelect.createQuery('twiFlat', qd), qd)
+        print("  Building twilight flat MasterCal for: {} with {} flat frames".format(f, len(flat_files)))
         mc_name = 'MCflat_{}.fits'.format(f)
         if os.path.exists(mc_name):
             if overwrite is True:
@@ -91,7 +97,6 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
             else:
                 print('Master flat, {} already exists and overwrite={}'.format(mc_name, overwrite))
                 return None
-        flat_files = fileSelect.fileListQuery(dbFile, fileSelect.createQuery('twiFlat', qd), qd)
         if len(flat_files) > 0:
             gmos.giflat(','.join(str(x) for x in flat_files), mc_name, 
                          bias='MCbias', **flat_flags)
@@ -276,6 +281,8 @@ if __name__ == "__main__":
     in r and i band
     '''
 
+    REDUCE_DIR = '../data/reduced/2017eaw/epoch1'
+
     qd = {'use_me':1,
           'Instrument':'GMOS-N',
           'CcdBin':'2 2',
@@ -286,17 +293,18 @@ if __name__ == "__main__":
     db_file='obsLog.sqlite3'
 
     #BIAS
-    GMOS_imaging_calibration.create_master_bias(qd, REDUCE_DIR, os.path.join(REDUCE_DIR, db_file), 
-                       master_bias=os.path.join(REDUCE_DIR,'MCbias.fits'), overwrite=True)
+    GMOS_imaging_calibration.create_master_bias(qd, db_file, REDUCE_DIR,
+                       master_bias='MCbias.fits', overwrite=True)
                    
     #TWILIGHT FLAT
     # Select flats obtained contemporaneously with the observations.
+
     qd['DateObs']='2018-06-01:2018-07-09'
     GMOS_imaging_calibration.create_master_twilight_flat(qd, db_file, REDUCE_DIR, overwrite=True)
 
+    #SCIENCE IMAGES
     qd['DateObs'] = '*'
     GMOS_imaging_calibration.calibrate_science_images(qd, os.path.basename(db_file), REDUCE_DIR, overwrite=True)
 
     targets = ['SN2017eaw (first visit)']
     GMOS_imaging_calibration.create_coadd_img(qd, targets, os.path.basename(db_file), REDUCE_DIR, prefix='mrg', overwrite=True)
-
