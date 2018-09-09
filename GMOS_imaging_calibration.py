@@ -9,6 +9,9 @@ import os
 import glob
 import sys
 
+from astropy.time import Time
+import astropy.units as u
+
 import fileSelect
 from pyraf import iraf
 from pyraf.iraf import gemini, gemtools, gmos
@@ -31,12 +34,20 @@ def create_master_bias(qd, dbFile, data_dir, master_bias='MCbias.fits', overwrit
 
     SQL = fileSelect.createQuery('bias', qd)
     bias_files = fileSelect.fileListQuery(dbFile, SQL, qd)
+    start_date = Time(qd['DateObs'].split(':')[0], out_subfmt='date')
+    end_date = qd['DateObs'].split(':')[1]
+    while len(bias_files) < 7:
+        start_date = start_date-1.0*u.day
+        qd['DateObs'] = '{}:{}'.format(start_date, end_date)
+        SQL = fileSelect.createQuery('bias', qd)
+        bias_files = fileSelect.fileListQuery(dbFile, SQL, qd)
+        
     gmos.gbias.unlearn()
     bias_flags = {'logfile':'biasLog.txt',
                  'rawpath':'',
                  'fl_vardq':'yes',
                  'verbose':'no'}
-    print('{} bias frames used in Master Bias'.format(len(bias_files)))
+    print('{} bias frames used in Master Bias over date range {}'.format(len(bias_files), qd['DateObs']))
     if len(bias_files) < 10:
         print('******WARNING less than 10 bias files********')
     if len(bias_files) > 1:
@@ -81,11 +92,20 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
     else:
         flat_flags['bpm'] = 'gmos$data/gmos-s_bpm_HAM_22_12amp_v1.fits'
     filters = ['Ha', 'HaC', 'SII', 'r', 'i']
+    original_dateobs = qd['DateObs']
     for f in filters:
         # Select filter name using a substring of the official designation.
         qd['Filter2'] = f + '_G%'
-        flat_files = fileSelect.fileListQuery(dbFile, fileSelect.createQuery('twiFlat', qd), qd)
-        print("  Building twilight flat MasterCal for: {} with {} flat frames".format(f, len(flat_files)))
+        SQL = fileSelect.createQuery('twiFlat', qd)
+        flat_files = fileSelect.fileListQuery(dbFile, SQL, qd)
+        start_date = Time(qd['DateObs'].split(':')[0], out_subfmt='date')
+        end_date = qd['DateObs'].split(':')[1]
+        while (len(flat_files) < 7) & ((Time(end_date)-start_date) < 365*u.day):
+            start_date = start_date-1.0*u.day
+            qd['DateObs'] = '{}:{}'.format(start_date, end_date)
+            SQL = fileSelect.createQuery('twiFlat', qd)
+            flat_files = fileSelect.fileListQuery(dbFile, SQL, qd)
+        
         mc_name = 'MCflat_{}.fits'.format(f)
         if os.path.exists(mc_name):
             if overwrite is True:
@@ -98,8 +118,10 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
                 print('Master flat, {} already exists and overwrite={}'.format(mc_name, overwrite))
                 return None
         if len(flat_files) > 0:
+            print("  Building twilight flat MasterCal for: {} with {} flat frames from date range {}".format(f, len(flat_files), qd['DateObs']))
             gmos.giflat(','.join(str(x) for x in flat_files), mc_name, 
                          bias='MCbias', **flat_flags)
+        qd['DateObs'] = original_dateobs
     # Clean up
     if not os.path.exists(mc_name):
         sys.exit('ERROR creating Master Flat Field: {}'.foramt(mc_name))
@@ -165,7 +187,7 @@ def calibrate_science_images(qd, dbFile, data_dir, biasfilename='MCbias', overwr
     # Reduce the science images, then mosaic the extensions in a loop
     filters = ['Ha', 'HaC', 'SII', 'r', 'i']
     for f in filters:
-        print "    Processing science images for: %s" % (f)
+        print("    Processing science images for: %s" % (f))
         qd['Filter2'] = f + '_G%'
         flatFile = 'MCflat_' + f
         sciFiles = fileSelect.fileListQuery(dbFile, fileSelect.createQuery('sciImg', qd), qd)
@@ -212,7 +234,7 @@ def calibrate_standard_images(qd, dbFile, std_name, biasfilename='MCbias', overw
     # Reduce the science images, then mosaic the extensions in a loop
     filters = ['Ha', 'HaC', 'SII', 'r', 'i']
     for f in filters:
-        print "    Processing science images for: %s" % (f)
+        print("    Processing science images for: %s" % (f))
         qd['Filter2'] = f + '_G%'
         flatFile = 'MCflat_' + f
         sql_query = '''SELECT file FROM obslog WHERE Object='{}' AND Filter2 LIKE '{}%' '''.format(std_name, f)
