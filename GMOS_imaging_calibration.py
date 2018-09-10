@@ -88,7 +88,7 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
         'verbose':'no'
         }
     if qd['Instrument'] == 'GMOS-N':
-        flat_flags['bpm']= 'gmos$data/gmos-n_bpm_HAM_22_12amp_v1.fits'
+        flat_flags['bpm']=  'gmos$data/gmos-n_bpm_HAM_22_12amp_v1.fits'
     else:
         flat_flags['bpm'] = 'gmos$data/gmos-s_bpm_HAM_22_12amp_v1.fits'
     filters = ['Ha', 'HaC', 'SII', 'r', 'i']
@@ -124,7 +124,7 @@ def create_master_twilight_flat(qd, dbFile, data_dir, overwrite=True):
         qd['DateObs'] = original_dateobs
     # Clean up
     if not os.path.exists(mc_name):
-        sys.exit('ERROR creating Master Flat Field: {}'.foramt(mc_name))
+        sys.exit('ERROR creating Master Flat Field: {}'.format(mc_name))
     if qd['Instrument']=='GMOS-N':
         image_str = 'gN'
     else:
@@ -168,9 +168,9 @@ def calibrate_science_images(qd, dbFile, data_dir, biasfilename='MCbias', overwr
         'verbose':'no'
         }
     if qd['Instrument'] == 'GMOS-N':
-       sciFlags['bpm'] = 'gmos$data/gmos-n_bpm_HAM_22_12amp_v1.fits'
+       sciFlags['bpm'] =  'gmos$data/gmos-n_bpm_HAM_22_12amp_v1.fits'
     else:
-        sciFlags['bpm'] = 'gmos$data/gmos-s_bpm_HAM_22_12amp_v1.fits',
+        sciFlags['bpm'] = 'gmos$data/gmos-s_bpm_HAM_22_12amp_v1.fits'
 
     gemtools.gemextn.unlearn()    # disarms a bug in gmosaic
     gmos.gmosaic.unlearn()
